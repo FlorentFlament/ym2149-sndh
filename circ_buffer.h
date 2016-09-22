@@ -9,6 +9,8 @@ struct circular_buffer {
 
 int circ_buf_len(const struct circular_buffer* buf);
 
+int circ_buf_free(const struct circular_buffer* buf);
+
 int circ_buf_full(const struct circular_buffer* buf);
 
 int circ_buf_empty(const struct circular_buffer* buf);
