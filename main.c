@@ -11,15 +11,11 @@
 #define RX_COMPLETE 2
 #define RX_WAITING  3
 
-#define SP_PROCESS 1
-#define SP_WAITING 2
-
 static char buf_data[BUF_SIZE];
 static struct circular_buffer buf;
 
 // States registers
 static volatile int rx_state; // UART RX state
-static volatile int sp_state; // Sample state
 
 /***** Interruption vectors *****/
 
@@ -39,11 +35,6 @@ ISR(USART_RX_vect) {
       rx_state = RX_COMPLETE;
     }
   }
-}
-
-// Send sample to YM2149 at the right time
-ISR(TIMER1_COMPA_vect) {
-  sp_state = SP_PROCESS;
 }
 
 
@@ -89,7 +80,6 @@ void init(void) {
 
   // Enable interrupts
   UCSR0B |= 1 << RXCIE0; // Enable USART RX complete interrupt
-  TIMSK1 |= 1 << OCIE1A; // Enable Timer/Counter1, Output Compare A Match Interrupt
   sei();
 }
 
@@ -136,15 +126,10 @@ int main() {
 	rx_state = RX_WAITING;
       }
     }
-    if (sp_state == SP_PROCESS) {
+    if (TIFR1 & 1<<OCF1A) {
       play_sample();
       update_timer();
-      sp_state = SP_WAITING;
+      TIFR1 |= 1<<OCF1A; // Clear the flag
     }
-    //if (TIFR1 & 1<<OCF1A) {
-    //  play_sample();
-    //  update_timer();
-    //  TIFR1 |= 1<<OCF1A; // Clear the flag
-    //}
   }
 }
