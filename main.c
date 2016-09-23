@@ -14,19 +14,12 @@
 #define SP_PROCESS 1
 #define SP_WAITING 2
 
-struct ym_sample {
-  volatile char reg_enabled[YM_REGS_CNT];
-  volatile char reg_values[YM_REGS_CNT];
-};
-
 static char buf_data[BUF_SIZE];
 static struct circular_buffer buf;
-static struct ym_sample sample;
 
 // States registers
 static volatile int rx_state; // UART RX state
 static volatile int sp_state; // Sample state
-
 
 /***** Interruption vectors *****/
 
@@ -66,7 +59,7 @@ void init_uart(void) {
   UCSR0B |= (1 << TXEN0) | (1 << RXEN0);
 }
 
-void init_samples_timer(void) {
+void init_timer(void) {
   // Set OC1A in normal port operation (disconnected)
   TCCR1A &= ~(0x01 << COM1A1);
   TCCR1A &= ~(0x01 << COM1A0);
@@ -81,27 +74,15 @@ void init_samples_timer(void) {
   TCCR1B &= ~(0x01 << CS10);
 }
 
-void init_sample(void) {
-  int i;
-  for (i=0; i<YM_REGS_CNT; i++) {
-    sample.reg_enabled[i] = 0;
-    sample.reg_values[i] = 0;
-  }
-}
-
 void init(void) {
   buf.size  = BUF_SIZE;
   buf.data  = buf_data;
   buf.start = buf_data;
   buf.end   = buf_data;
 
-  rx_state = RX_COMPLETE;
-  sp_state = SP_PROCESS;
-
   init_led();
   init_uart();
-  init_sample();
-  init_samples_timer();
+  init_timer();
 
   ym_set_clock();
   ym_set_bus_ctl();
@@ -115,49 +96,33 @@ void init(void) {
 
 /***** Some utility functions *****/
 
-void get_next_sample(void) {
-  int i;
-  int count;
-  unsigned char addr;
-
+void update_timer(void) {
   // Set OCR1A to the next timestamp
   OCR1AH = circ_buf_get_byte(&buf);
   OCR1AL = circ_buf_get_byte(&buf);
-
-  // Don't update registers if not required
-  for (i=0; i<YM_REGS_CNT; i++) {
-    sample.reg_enabled[i] = 0;
-  }
-
-  // Read registers sent
-  count = circ_buf_get_byte(&buf);
-  if (count <= YM_REGS_CNT) {
-    // Sanity check
-    for (i=0; i<count; i++) {
-      addr = circ_buf_get_byte(&buf);
-      if (addr < YM_REGS_CNT) {
-        // Sanity check
-        sample.reg_enabled[addr] = 1;
-        sample.reg_values[addr] = circ_buf_get_byte(&buf);
-      }
-    }
-  }
 }
 
 void play_sample(void) {
   int i;
-  for (i=0; i<YM_REGS_CNT; i++) {
-    if (sample.reg_enabled[i]) {
-      ym_send_data(i, sample.reg_values[i]);
-    }
+  unsigned char addr;
+  for (i=0; i < (unsigned char)circ_buf_get_byte(&buf); i++) {
+      addr = circ_buf_get_byte(&buf);
+      ym_send_data(addr, circ_buf_get_byte(&buf));
   }
 }
 
+void bootstrap_stream(void) {
+  // Ask for 255 bytes of data
+  UDR0 = 255;
+  rx_state = RX_WAITING;
+  update_timer();
+}
 
 /***** Main *****/
 
 int main() {
   init();
+  bootstrap_stream();
 
   for(;;) {
     if (rx_state == RX_COMPLETE) {
@@ -173,8 +138,12 @@ int main() {
     }
     if (sp_state == SP_PROCESS) {
       play_sample();
-      get_next_sample();
       sp_state = SP_WAITING;
     }
+    //if (TIFR1 & 1<<OCF1A) {
+    //  play_sample();
+    //  update_timer();
+    //  TIFR1 |= 1<<OCF1A; // Clear the flag
+    //}
   }
 }
