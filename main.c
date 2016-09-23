@@ -104,10 +104,10 @@ void update_timer(void) {
 
 void play_sample(void) {
   int i;
-  unsigned char addr;
-  for (i=0; i < (unsigned char)circ_buf_get_byte(&buf); i++) {
-      addr = circ_buf_get_byte(&buf);
-      ym_send_data(addr, circ_buf_get_byte(&buf));
+  unsigned char count = circ_buf_get_byte(&buf);
+  for (i=0; i < count; i++) {
+    unsigned char addr = circ_buf_get_byte(&buf);
+    ym_send_data(addr, circ_buf_get_byte(&buf));
   }
 }
 
@@ -138,6 +138,7 @@ int main() {
     }
     if (sp_state == SP_PROCESS) {
       play_sample();
+      update_timer();
       sp_state = SP_WAITING;
     }
     //if (TIFR1 & 1<<OCF1A) {
