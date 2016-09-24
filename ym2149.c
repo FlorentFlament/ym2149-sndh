@@ -44,9 +44,9 @@ void set_address(char addr) {
   PORTC = (PORTC & 0xf3) | ADDRESS_MODE;
   PORTC = (PORTC & 0xfc) | (addr & 0x03); // 2 first bits ont PORTC
   PORTD = (PORTD & 0x02) | (addr & 0xfc); // 6 last bits on PORTD
-  _delay_us(1.); //tAS = 300ns
+  //tAS = 300ns = 4.8 clock cycles
   PORTC = (PORTC & 0xf3) /*INACTIVE*/ ;
-  _delay_us(1.); //tAH = 80ns
+  //tAH = 80ns  = 1.3 clock cycles
 }
 
 void set_data(char data) {
@@ -54,19 +54,21 @@ void set_data(char data) {
   PORTC = (PORTC & 0xfc) | (data & 0x03); // 2 first bits ont PORTC
   PORTD = (PORTD & 0x02) | (data & 0xfc); // 6 last bits on PORTD
   PORTC = (PORTC & 0xf3) | DATA_WRITE;
-  _delay_us(1.); // 300ns < tDW < 10us
+  // 300ns < tDW < 10us = 4.8 clock cycles
   PORTC = (PORTC & 0xf3) /*INACTIVE*/ ; // To fit tDW max
-  _delay_us(1.); // tDH = 80ns
+  // tDH = 80ns = 1.3 clock cycles
 }
 
 char get_data(void) {
   char data;
   set_data_in();
   PORTC = (PORTC & 0xf3) | DATA_READ;
-  _delay_us(1.); // tDA = 400ns
+  // tDA = 400ns = 6.4 clock cycles
+  // The 16 cycles delay may be required there
+  _delay_us(1.);
   data = (PIND & 0xfc) | (PINB & 0x03);
   PORTC = (PORTC & 0xf3) /*INACTIVE*/ ;
-  _delay_us(1.); // tTS = 100ns
+  // tTS = 100ns = 1.6 clock cycles
   return data;
 }
 
