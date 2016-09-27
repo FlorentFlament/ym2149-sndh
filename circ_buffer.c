@@ -3,38 +3,38 @@
 #include "circ_buffer.h"
 
 int circ_buf_len(const struct circular_buffer* buf) {
-  if (buf->end < buf->start) {
-    return (buf->end - buf->start) + buf->size;
-  }
-  return buf->end - buf->start;
+  return buf->last - buf->first - circ_buf_free(buf);
 }
 
 int circ_buf_free(const struct circular_buffer* buf) {
-  return buf->size - circ_buf_len(buf) - 1;
+  if (buf->last < buf->first) {
+    return buf->first - buf->last - 1;
+  }
+  return (buf->end - buf->start) - (buf->last - buf->first);
 }
 
 int circ_buf_full(const struct circular_buffer* buf) {
-  if (buf->end == (buf->data + buf->size - 1)) {
-    return buf->start == 0;
+  if (buf->last == (buf->end - 1)) {
+    return buf->first == 0;
   }
-  return buf->end == (buf->start - 1);
+  return buf->last == (buf->first - 1);
 }
 
 int circ_buf_empty(const struct circular_buffer* buf) {
-  return buf->end == buf->start;
+  return buf->last == buf->first;
 }
 
 void __circ_buf_put_byte_nb(struct circular_buffer* buf, char c) {
-  *(buf->end) = c;
-  if (++buf->end == (buf->data + buf->size)) {
-    buf->end = buf->data;
+  *(buf->last) = c;
+  if (++buf->last == buf->end) {
+    buf->last = buf->start;
   }
 }
 
 char __circ_buf_get_byte_nb(struct circular_buffer* buf) {
-  char c = *(buf->start);
-  if (++buf->start == (buf->data + buf->size)) {
-    buf->start = buf->data;
+  char c = *(buf->first);
+  if (++buf->first == buf->end) {
+    buf->first = buf->start;
   }
   return c;
 }

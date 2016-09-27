@@ -1,10 +1,10 @@
 // We need to instruct the compiler that these data may be changed
 // during an interrupt.
 struct circular_buffer {
-  int size;
-  volatile char* data;
-  volatile char* volatile start;
-  volatile char* volatile end;
+  volatile char* start;
+  volatile char* end;
+  volatile char* volatile first;
+  volatile char* volatile last;
 };
 
 int circ_buf_len(const struct circular_buffer* buf);

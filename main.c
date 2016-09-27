@@ -11,18 +11,22 @@
 #define RX_COMPLETE 2
 #define RX_WAITING  3
 
+// Macro to get a byte from a circular buffer
+#define M_CIRC_BUF_GET_BYTE *buf.first; if(++buf.first==buf.end){buf.first=buf.start;}
+#define M_BLK_CB_GET_BYTE(VAR) while(buf.last==buf.first); VAR=M_CIRC_BUF_GET_BYTE
+
 static char buf_data[BUF_SIZE];
 static struct circular_buffer buf;
 
 // States registers
-static volatile int rx_state; // UART RX state
+static volatile unsigned char rx_state; // UART RX state
 
 /***** Interruption vectors *****/
 
 // Define interrupt code when data is received from the UART
 ISR(USART_RX_vect) {
-  static int count;
-  static int chunk_size;
+  static unsigned char count;
+  static unsigned char chunk_size;
   switch(rx_state) {
   case RX_WAITING:
     count = 0;
@@ -30,8 +34,11 @@ ISR(USART_RX_vect) {
     rx_state = RX_PROGRESS;
     break;
   case RX_PROGRESS:
-    __circ_buf_put_byte_nb(&buf, UDR0);
-    if (++count >= chunk_size) {
+    *buf.last = UDR0;
+    if (++buf.last == buf.end) {
+      buf.last = buf.start;
+    }
+    if (++count == chunk_size) {
       rx_state = RX_COMPLETE;
     }
   }
@@ -66,10 +73,10 @@ void init_timer(void) {
 }
 
 void init(void) {
-  buf.size  = BUF_SIZE;
-  buf.data  = buf_data;
-  buf.start = buf_data;
-  buf.end   = buf_data;
+  buf.end  = buf_data + BUF_SIZE;
+  buf.start  = buf_data;
+  buf.first = buf_data;
+  buf.last   = buf_data;
 
   init_led();
   init_uart();
@@ -84,51 +91,46 @@ void init(void) {
 }
 
 
-/***** Some utility functions *****/
-
-void update_timer(void) {
-  // Set OCR1A to the next timestamp
-  OCR1AH = circ_buf_get_byte(&buf);
-  OCR1AL = circ_buf_get_byte(&buf);
-}
-
-void play_sample(void) {
-  int i;
-  unsigned char count = circ_buf_get_byte(&buf);
-  for (i=0; i < count; i++) {
-    unsigned char addr = circ_buf_get_byte(&buf);
-    ym_send_data(addr, circ_buf_get_byte(&buf));
-  }
-}
-
-void bootstrap_stream(void) {
-  // Ask for 255 bytes of data
-  UDR0 = 255;
-  rx_state = RX_WAITING;
-  update_timer();
-}
-
 /***** Main *****/
 
 int main() {
   init();
-  bootstrap_stream();
+
+  // Bootstrap stream
+  UDR0 = 255;
+  rx_state = RX_WAITING;
+  // Set OCR1A to the next timestamp
+  M_BLK_CB_GET_BYTE(OCR1AH);
+  M_BLK_CB_GET_BYTE(OCR1AL);
 
   for(;;) {
     if (rx_state == RX_COMPLETE) {
-      int n = circ_buf_free(&buf);
+      // Empty space in circular buffer
+      int n;
+      if (buf.last < buf.first) n = buf.first - buf.last - 1;
+      else n = BUF_SIZE-1 - (buf.last - buf.first);
+
       if (n > 0) {
-	if (n > 255) {
-	  UDR0 = 255;
-	} else {
-	  UDR0 = n;
-	}
-	rx_state = RX_WAITING;
+	if (n > 255) UDR0 = 255;
+	else UDR0 = n;
+        rx_state = RX_WAITING;
       }
     }
+
     if (TIFR1 & 1<<OCF1A) {
-      play_sample();
-      update_timer();
+      unsigned char i;
+      unsigned char count;
+      M_BLK_CB_GET_BYTE(count);
+      for (i=0; i < count; i++) {
+        unsigned char addr;
+        char val;
+        M_BLK_CB_GET_BYTE(addr);
+        M_BLK_CB_GET_BYTE(val);
+        ym_send_data(addr, val);
+      }
+      // Set OCR1A to the next timestamp
+      M_BLK_CB_GET_BYTE(OCR1AH);
+      M_BLK_CB_GET_BYTE(OCR1AL);
       TIFR1 |= 1<<OCF1A; // Clear the flag
     }
   }
