@@ -3,9 +3,7 @@ avrFreq=16000000 # 16 Mhz
 programmerDev=/dev/ttyUSB0
 programmerType=arduino
 
-#cflags=-DF_CPU=$(avrFreq) -mmcu=$(avrType) -Wall -Werror -Wextra -Ofast
-cflags=-DF_CPU=$(avrFreq) -mmcu=$(avrType) -Wall -Werror -Wextra -Os
-#cflags=-DF_CPU=$(avrFreq) -mmcu=$(avrType) -Wall -Wextra -O0
+cflags=-DF_CPU=$(avrFreq) -mmcu=$(avrType) -Wall -Werror -Wextra -Ofast
 
 objects=$(patsubst %.c,%.o,$(wildcard *.c))
 
@@ -29,4 +27,4 @@ flash: main.hex
 	avrdude -p$(avrType) -c$(programmerType) -P$(programmerDev) -v -U flash:w:$< -D
 
 clean:
-	rm -f main.hex main.elf $(objects)
+	rm -f main.hex main.elf $(objects) *.s
