@@ -104,25 +104,39 @@ def main():
     for d in data:
         data_ts.append(chr(ts>>8 & 0xff))
         data_ts.append(chr(ts & 0xff))
-        data_ts.append(chr(len(d)))
         for i,v in enumerate(d):
             data_ts.append(chr(i))
             data_ts.append(v)
+        data_ts.append('\xff') # Stop character
         ts = (ts + 40000) & 0xffff
 
     s = ''.join(data_ts)
     print "*****", len(s)
-    fd = serial.Serial(sys.argv[1], 1000000, stopbits=1, timeout=1)
+    fd = serial.Serial(sys.argv[1], 1000000,
+                       stopbits=serial.STOPBITS_ONE,
+                       # parity=serial.PARITY_EVEN,
+                       timeout=2)
     time.sleep(2) # Waiting for arduino initialization
     i = 0
     while i < len(s):
-        cnt = ord(fd.read())
+        cnt = fd.read()
+        fd.write(cnt)
+        ack = fd.read()
+        while ack != '\x00':
+            ret = fd.read()
+            print "**", ord(cnt), ord(ack), ord(ret)
+            cnt = fd.read()
+            fd.write(cnt)
+            ack = fd.read()
+        print "**", ord(cnt), ord(ack)
+
+        cnt = ord(cnt)
         #cnt = cnt if i+cnt < len(s) else len(s)-i
         j = i+cnt
         print cnt, i, j
         chunk = s[i:j]
         #print [ord(c) for c in chunk]
-        fd.write(chr(cnt) + chunk)
+        fd.write(chunk)
         i = j
     fd.close()
 
