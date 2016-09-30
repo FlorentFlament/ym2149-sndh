@@ -112,10 +112,14 @@ def main():
 
     s = ''.join(data_ts)
     print "*****", len(s)
-    fd = serial.Serial(sys.argv[1], 1000000,
-                       stopbits=serial.STOPBITS_ONE,
-                       # parity=serial.PARITY_EVEN,
-                       timeout=2)
+    fd = serial.Serial(sys.argv[1], 1000000, timeout=2)
+    # !!! https://github.com/torvalds/linux/blob/c05c2ec96bb8b7310da1055c7b9d786a3ec6dc0c/drivers/usb/serial/ch341.c
+    # /* Unimplemented:
+    #  * (cflag & CSIZE) : data bits [5, 8]
+    #  * (cflag & PARENB) : parity {NONE, EVEN, ODD}
+    #  * (cflag & CSTOPB) : stop bits [1, 2]
+    #  */
+
     time.sleep(2) # Waiting for arduino initialization
     i = 0
     while i < len(s):
@@ -123,17 +127,17 @@ def main():
         fd.write(cnt)
         ack = fd.read()
         while ack != '\x00':
-            ret = fd.read()
-            print "**", ord(cnt), ord(ack), ord(ret)
+            print "** cnt,ack", ord(cnt), ord(ack)
             cnt = fd.read()
             fd.write(cnt)
             ack = fd.read()
-        print "**", ord(cnt), ord(ack)
+            exit(1)
+        print "** cnt,ack", ord(cnt), ord(ack)
 
         cnt = ord(cnt)
         #cnt = cnt if i+cnt < len(s) else len(s)-i
         j = i+cnt
-        print cnt, i, j
+        print "*** cnt,i,j", cnt, i, j
         chunk = s[i:j]
         #print [ord(c) for c in chunk]
         fd.write(chunk)

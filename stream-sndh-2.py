@@ -2,7 +2,7 @@ import serial
 import sys
 import time
 
-fd = serial.Serial("/dev/ttyUSB0", 1000000, stopbits=1, timeout=0)
+fd = serial.Serial("/dev/ttyUSB0", 1000000, timeout=1)
 time.sleep(2) # Waiting for arduino initialization
 
 data = ""
@@ -21,15 +21,15 @@ while not done:
 	    sample.append(chr(int(ts[-2:], 16)))
 
 	    en_regs = filter(lambda x:x[1] != '..', enumerate(regs.split('-')))
-	    sample.append(chr(len(en_regs)))
 	    for n,r in en_regs:
 	        sample.append(chr(n))
 	        sample.append(chr(int(r,16)))
+	    sample.append('\xff')
 
             data += (''.join(sample))
 
     # Send data to Chip if ready
-    if len(data) > 100:
+    if len(data) > 1000:
         avail = fd.read()
         if avail:
             avail = ord(avail)
@@ -37,5 +37,8 @@ while not done:
             ck_size = min(avail, len(data))
             print "ck_size:", ck_size
             print "len(data):", len(data)
-            fd.write(chr(ck_size) + data[:ck_size])
+            fd.write(chr(ck_size))
+            ack = fd.read()
+            print "ack:", ord(ack)
+            fd.write(data[:ck_size])
             data = data[ck_size:]

@@ -40,7 +40,6 @@ static volatile unsigned int free_cnt; // Free space in buffer
 ISR(USART_RX_vect) {
   static unsigned char count;
   static unsigned char chunk_size;
-  unsigned char flags;
 
   switch(rx_state) {
   case RX_PROGRESS:
@@ -49,32 +48,13 @@ ISR(USART_RX_vect) {
     if (++count == chunk_size) rx_state = RX_COMPLETE;
     break;
   case RX_WAITING:
-    flags = UCSR0A;
     chunk_size = UDR0; // consuming data
-    if (flags & 1<<FE0) { // Frame Error (4)
-      M_UART_PUT_BYTE(FE0);
-      M_UART_PUT_BYTE(chunk_size);
-      rx_state = RX_COMPLETE;
-      break;
-    }
-    if (flags & 1<<DOR0) { // Data OverRun (3)
-      M_UART_PUT_BYTE(DOR0);
-      M_UART_PUT_BYTE(chunk_size);
-      rx_state = RX_COMPLETE;
-      break;
-    }
-    if (flags & 1<<UPE0) { // Parity Error (2)
-      M_UART_PUT_BYTE(UPE0|0xf0);
-      M_UART_PUT_BYTE(chunk_size);
-      rx_state = RX_COMPLETE;
-      break;
-    }
     if (chunk_size > free_cnt) {
-      M_UART_PUT_BYTE(RX_BAD);
+      UDR0 = RX_BAD;
       rx_state = RX_COMPLETE;
       break;
     }
-    M_UART_PUT_BYTE(RX_ACK);
+    UDR0 = RX_ACK;
     if (chunk_size == 0) {
       rx_state = RX_COMPLETE;
       break;
@@ -94,8 +74,8 @@ void init_uart(void) {
   // Setting bi-directionnal UART communication
   // Enable USART RX complete interrupt
   UCSR0B |= 1<<TXEN0 | 1<<RXEN0 | 1<<RXCIE0;
-  // Set frame format = 8-N-1 with Odd Parity enabled
-  UCSR0C = 0x03<<UCSZ00;// | 0x02<<UPM00;
+  // Set frame format = 8-N-1 - Only supported format by ch341 linux driver
+  UCSR0C = 0x03<<UCSZ00;
 }
 
 void init_timer(void) {
