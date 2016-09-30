@@ -3,7 +3,8 @@
 #include "blink.h"
 
 void init_led(void) {
-  DDRB |= 1 << LED;
+  DDRB |= 1<<LED;
+  DDRB |= 1<<PORTB0 | 1<<PORTB1 | 11<<PORTB2;
 }
 
 void blink(void) {
@@ -19,4 +20,9 @@ void blink_n(int count) {
     blink();
   }
   _delay_ms(2*BLINK_SPEED);
+}
+
+void set_leds(int n) {
+  PORTB |= n & 0x07;
+  PORTB &= 0xf8 | (n&0x07);
 }

@@ -141,6 +141,7 @@ int main() {
   rx_state = RX_COMPLETE;
 
   for(;;) {
+    set_leds(rx_state);
     // Sample state machine
     switch(smp_state) {
     case SMP_TSHI:

@@ -6,3 +6,4 @@
 void init_led(void);
 void blink(void);
 void blink_n(int count);
+void set_leds(int n);
