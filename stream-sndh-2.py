@@ -9,7 +9,7 @@ data = ""
 done = False
 while not done:
 
-    if len(data) < 2000:
+    if len(data) < 5000:
 	    l = sys.stdin.readline()
 	    if not l:
 	        done = True
@@ -29,15 +29,17 @@ while not done:
             data += (''.join(sample))
 
     # Send data to Chip if ready
-    if len(data) > 1000:
-        avail = fd.read()
+    if len(data) > 2000:
+        avail = ord(fd.read())
+        print " ** avail pre", avail
+        avail = (avail<<8) + ord(fd.read())
         if avail:
-            avail = ord(avail)
             print "avail:", avail
             ck_size = min(avail, len(data))
             print "ck_size:", ck_size
             print "len(data):", len(data)
-            fd.write(chr(ck_size))
+            fd.write(chr(ck_size>>8 & 0xff))
+            fd.write(chr(ck_size & 0xff))
             ack = fd.read()
             print "ack:", ord(ack)
             fd.write(data[:ck_size])

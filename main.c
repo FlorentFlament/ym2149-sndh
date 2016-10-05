@@ -4,12 +4,14 @@
 #include "ym2149.h"
 #include "blink.h"
 
-#define BUF_SIZE 1024
+#define BUF_SIZE 1536
 
 // Possible RX states
 #define RX_PROGRESS 1
 #define RX_COMPLETE 2
 #define RX_WAITING  3
+#define RX_CHUNKLO  4
+#define RX_WAITLO   5
 
 // Possible statuses sent on the UART
 #define RX_ACK 0
@@ -38,8 +40,8 @@ static volatile unsigned int free_cnt; // Free space in buffer
 
 // Define interrupt code when data is received from the UART
 ISR(USART_RX_vect) {
-  static unsigned char count;
-  static unsigned char chunk_size;
+  static unsigned int count;
+  static unsigned int chunk_size;
 
   switch(rx_state) {
   case RX_PROGRESS:
@@ -49,6 +51,10 @@ ISR(USART_RX_vect) {
     break;
   case RX_WAITING:
     chunk_size = UDR0; // consuming data
+    rx_state = RX_WAITLO;
+    break;
+  case RX_WAITLO:
+    chunk_size = (chunk_size<<8) + UDR0;
     if (chunk_size > free_cnt) {
       UDR0 = RX_BAD;
       rx_state = RX_COMPLETE;
@@ -157,14 +163,18 @@ int main() {
     }
 
     // RX State machine when RX_COMPLETE
-    if (rx_state == RX_COMPLETE) {
+    switch (rx_state) {
+    case RX_COMPLETE:
+      if (!(UCSR0A & 1<<UDRE0)) break;
       if (buf.last < buf.first) free_cnt = buf.first - buf.last - 1;
       else free_cnt = BUF_SIZE-1 - (buf.last - buf.first);
-      if ((free_cnt > 0) && (UCSR0A & 1<<UDRE0)) {
-	if (free_cnt > 255) UDR0 = 255;
-	else UDR0 = free_cnt;
-	rx_state = RX_WAITING;
-      }
+      if (free_cnt == 0) break;
+      UDR0 = free_cnt>>8 & 0xff;
+      rx_state = RX_CHUNKLO;
+    case RX_CHUNKLO:
+      if (!(UCSR0A & 1<<UDRE0)) break;
+      UDR0 = free_cnt & 0xff;
+      rx_state = RX_WAITING;
     }
   }
 }
