@@ -120,21 +120,14 @@ def main():
     #  * (cflag & CSTOPB) : stop bits [1, 2]
     #  */
 
-    time.sleep(2) # Waiting for arduino initialization
     i = 0
     while i < len(s):
-        cnt = fd.read()
-        fd.write(cnt)
-        ack = fd.read()
-        while ack != '\x00':
-            print "** cnt,ack", ord(cnt), ord(ack)
-            cnt = fd.read()
-            fd.write(cnt)
-            ack = fd.read()
-            exit(1)
-        print "** cnt,ack", ord(cnt), ord(ack)
-
-        cnt = ord(cnt)
+        cnt = ord(fd.read())
+        cnt = (cnt<<8) + ord(fd.read())
+        fd.write(chr(cnt>>8))
+        fd.write(chr(cnt&0xff))
+        ack = ord(fd.read())
+        print "** cnt,ack", cnt, ack
         #cnt = cnt if i+cnt < len(s) else len(s)-i
         j = i+cnt
         print "*** cnt,i,j", cnt, i, j
