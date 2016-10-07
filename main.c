@@ -84,19 +84,10 @@ void init_uart(void) {
   UCSR0C = 0x03<<UCSZ00;
 }
 
-void init_timer(void) {
-  // Set OC1A in normal port operation (disconnected)
-  TCCR1A &= ~(0x01 << COM1A1);
-  TCCR1A &= ~(0x01 << COM1A0);
-  // Normal counting mode
-  TCCR1B &= ~(0x01 << WGM13);
-  TCCR1B &= ~(0x01 << WGM12);
-  TCCR1A &= ~(0x01 << WGM11);
-  TCCR1A &= ~(0x01 << WGM10);
+void init_samples_timer(void) {
+  // Let OC1A in normal port operation (disconnected) / Normal counting mode
   // Prescale CLK I/O from 16MHz to 2MHz
-  TCCR1B &= ~(0x01 << CS12);
-  TCCR1B |=   0x01 << CS11;
-  TCCR1B &= ~(0x01 << CS10);
+  TCCR1B |= 1<<CS11;
 }
 
 void init(void) {
