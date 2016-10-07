@@ -90,6 +90,22 @@ void init_samples_timer(void) {
   TCCR1B |= 1<<CS11;
 }
 
+void init_pwm(void) {
+  // Set OC0B in fast pwm mode
+  TCCR0A |= 0x02<<COM0B0; // Clear OC0B on Compare Match, set OC0B at BOTTOM, (non-inverting mode)
+  TCCR0A |= 0x03<<WGM00;  // Fast PWM
+  TCCR0B |= 0x01<<CS00;   // clkI/O /(No prescaling)
+  // Set OC2A & OC2B in fast pwm mode
+  TCCR2A |= 0x02<<COM2A0; // Clear OC2A on Compare Match, set OC2A at BOTTOM, (non-inverting mode)
+  TCCR2A |= 0x02<<COM2B0; // Clear OC2B on Compare Match, set OC2B at BOTTOM, (non-inverting mode)
+  TCCR2A |= 0x03<<WGM20;  // Fast PWM
+  TCCR2B |= 0x01<<CS20;   // clkI/O /(No prescaling)
+  // Toggle Pins to output
+  DDRD |= 1<<DDD5; // Set OC0B
+  DDRB |= 1<<DDB3; // Set OC2A
+  DDRD |= 1<<DDD3; // Set OC2B
+}
+
 void init(void) {
   buf.end  = buf_data + BUF_SIZE;
   buf.start  = buf_data;
@@ -98,7 +114,8 @@ void init(void) {
 
   init_led();
   init_uart();
-  init_timer();
+  init_samples_timer();
+  // init_pwm();
 
   ym_set_clock();
   ym_set_bus_ctl();
@@ -144,6 +161,12 @@ int main() {
       if (buf.last == buf.first) break;
       val = M_CIRC_BUF_GET_BYTE;
       ym_send_data(addr, val);
+      // Have LED aligned with 4 LSB @ addresses 0x8 0x9 & 0xa
+      //switch (addr) {
+      //case 0x8:	OCR0B = val<<4;	break;
+      //case 0x9:	OCR2A = val<<4;	break;
+      //case 0xa:	OCR2B = val<<4;
+      //}
       smp_state = SMP_ADDR;
       break;
     default: /* SMP_ERR */
