@@ -2,12 +2,12 @@
 
 #include "ym2149.h"
 
-// MSB (PB3) is connected to BDIR
-// LSB (PB2) is connected to BC1
+// MSB (PB5) is connected to BDIR
+// LSB (PB4) is connected to BC1
 // +5V is connected to BC2
-#define DATA_READ (0x01 << 2)
-#define DATA_WRITE (0x02 << 2)
-#define ADDRESS_MODE (0x03 << 2)
+#define DATA_READ (0x01 << 4)
+#define DATA_WRITE (0x02 << 4)
+#define ADDRESS_MODE (0x03 << 4)
 
 // Sets a 4MHz clock OC2A (PORTB3)
 void ym_set_clock(void) {
@@ -28,46 +28,46 @@ void ym_set_clock(void) {
 }
 
 void ym_set_bus_ctl(void) {
-  DDRC |= 0x0c; // Bits 2 and 3
+  DDRB |= 0x30; // Bits 4 and 5
 }
 void set_data_out(void) {
-  DDRC |= 0x03; // Bits 0 and 1
-  DDRD |= 0xfc; // Bits 2 to 7
+  DDRC |= 0x3f; // Bits 0 to 5
+  DDRD |= 0xc0; // Bits 6 to 7
 }
 void set_data_in(void) {
-  DDRC &= ~0x03; // Bits 0 and 1
-  DDRD &= ~0xfc; // Bits 2 to 7
+  DDRC &= ~0x3f; // Bits 0 to 5
+  DDRD &= ~0xc0; // Bits 6 to 7
 }
 
 void set_address(char addr) {
   set_data_out();
-  PORTC = (PORTC & 0xf3) | ADDRESS_MODE;
-  PORTC = (PORTC & 0xfc) | (addr & 0x03); // 2 first bits ont PORTC
-  PORTD = (PORTD & 0x02) | (addr & 0xfc); // 6 last bits on PORTD
+  PORTB = (PORTB & 0xcf) | ADDRESS_MODE;
+  PORTC = (PORTC & 0xc0) | (addr & 0x3f); // 6 first bits ont PORTC
+  PORTD = (PORTD & 0x3f) | (addr & 0xc0); // 2 last bits on PORTD
   //tAS = 300ns = 4.8 clock cycles
-  PORTC = (PORTC & 0xf3) /*INACTIVE*/ ;
+  PORTB = (PORTB & 0xcf) /*INACTIVE*/ ;
   //tAH = 80ns  = 1.3 clock cycles
 }
 
 void set_data(char data) {
   set_data_out();
-  PORTC = (PORTC & 0xfc) | (data & 0x03); // 2 first bits ont PORTC
-  PORTD = (PORTD & 0x02) | (data & 0xfc); // 6 last bits on PORTD
-  PORTC = (PORTC & 0xf3) | DATA_WRITE;
+  PORTC = (PORTC & 0xc0) | (data & 0x3f); // 6 first bits ont PORTC
+  PORTD = (PORTD & 0x3f) | (data & 0xc0); // 2 last bits on PORTD
+  PORTB = (PORTB & 0xcf) | DATA_WRITE;
   // 300ns < tDW < 10us = 4.8 clock cycles
-  PORTC = (PORTC & 0xf3) /*INACTIVE*/ ; // To fit tDW max
+  PORTB = (PORTB & 0xcf) /*INACTIVE*/ ; // To fit tDW max
   // tDH = 80ns = 1.3 clock cycles
 }
 
 char get_data(void) {
   char data;
   set_data_in();
-  PORTC = (PORTC & 0xf3) | DATA_READ;
+  PORTB = (PORTB & 0xcf) | DATA_READ;
   // tDA = 400ns = 6.4 clock cycles
   // The 16 cycles delay may be required there
   _delay_us(1.);
-  data = (PIND & 0xfc) | (PINB & 0x03);
-  PORTC = (PORTC & 0xf3) /*INACTIVE*/ ;
+  data = (PINC & 0x3f) | (PIND & 0xc0);
+  PORTB = (PORTB & 0xcf) /*INACTIVE*/ ;
   // tTS = 100ns = 1.6 clock cycles
   return data;
 }

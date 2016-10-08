@@ -38,6 +38,13 @@ static unsigned char smp_state; // Sample state register
 
 static volatile unsigned int free_cnt; // Free space in buffer
 
+// Sound level is an exponential function of a channel's volume
+// Formula is V = exp(ln(2)/2 * (x-15)) were x is the volume in the YM2149
+// Exact formula to compute the array:
+// [round(256*math.exp((math.log(2)/2)*(x-15))) - 1 for x in range(16)]
+static unsigned char sound_level[] = {0, 1, 2, 3, 5, 7, 10, 15, 22,
+				      31, 44, 63, 90, 127, 180, 255};
+
 // Define interrupt code when data is received from the UART
 ISR(USART_RX_vect) {
   static unsigned int count;
@@ -112,12 +119,11 @@ void init(void) {
   buf.first = buf_data;
   buf.last   = buf_data;
 
-  init_led();
+  // init_led();
   init_uart();
   init_samples_timer();
-  // init_pwm();
+  init_pwm();
 
-  ym_set_clock();
   ym_set_bus_ctl();
   // Enable interrupts
   sei();
@@ -162,11 +168,11 @@ int main() {
       val = M_CIRC_BUF_GET_BYTE;
       ym_send_data(addr, val);
       // Have LED aligned with 4 LSB @ addresses 0x8 0x9 & 0xa
-      //switch (addr) {
-      //case 0x8:	OCR0B = val<<4;	break;
-      //case 0x9:	OCR2A = val<<4;	break;
-      //case 0xa:	OCR2B = val<<4;
-      //}
+      switch (addr) {
+      case 0x8:	OCR0B = sound_level[val&0x0f]; break;
+      case 0x9:	OCR2A = sound_level[val&0x0f]; break;
+      case 0xa:	OCR2B = sound_level[val&0x0f];
+      }
       smp_state = SMP_ADDR;
       break;
     default: /* SMP_ERR */
