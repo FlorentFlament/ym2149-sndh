@@ -1,18 +1,20 @@
-Title: arduino-echo
+Title: ym2149-sndh
 
-This code is for testing bi-directional communication between a PC
-and an Arduino board over USB at 1Mbits / second.
+Atmega 328P Firmware code + Python scripts to play YM and SNDH files
+on the YM2149.
 
-Prerequisite:
-* The [Atmel tool chain][1]
-* the `pyserial` package
+To build the and flash the firmware:
 
-To build and upload the firmware to the Arduino:
+    $ make flash
 
-  $ make flash
+The repository includes a couple of scripts:
 
-To test the serial line:
+* `stream-ym.py` to play YM files on the YM2149 chip
+* `stream-sndh.py` to play SNDH files on the YM2149 chip
+* `stream-sndh-2.py` to play SNDH files on the YM2149 chip.
 
-  $ python test.py
+The `stream-sndh-2.py` is faster than `stream-sndh.py` but consumes
+more CPU. It can be useful to play some 'digi' sounds.
 
-[1]: http://www.florentflament.com/blog/arduino-hello-world-without-ide.html
+Not all SNDH files are currently supported. More optimization would be
+required.
