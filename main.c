@@ -1,8 +1,6 @@
 #include <avr/interrupt.h>
 
-#include "circ_buffer.h"
 #include "ym2149.h"
-#include "blink.h"
 
 #define BUF_SIZE 1536
 
@@ -29,6 +27,15 @@
 #define M_CIRC_BUF_GET_BYTE *buf.first; if(++buf.first==buf.end){buf.first=buf.start;}
 #define M_BLK_CB_GET_BYTE(VAR) while(buf.last==buf.first); VAR=M_CIRC_BUF_GET_BYTE
 #define M_UART_PUT_BYTE(DATA) while(!(UCSR0A & (1<<UDRE0))); UDR0=DATA
+
+// We need to instruct the compiler that these data may be changed
+// during an interrupt.
+struct circular_buffer {
+  volatile char* start;
+  volatile char* end;
+  volatile char* volatile first;
+  volatile char* volatile last;
+};
 
 static char buf_data[BUF_SIZE];
 static struct circular_buffer buf;
@@ -141,7 +148,6 @@ int main() {
   rx_state = RX_COMPLETE;
 
   for(;;) {
-    set_leds(rx_state);
     // Sample state machine
     switch(smp_state) {
     case SMP_TSHI:
