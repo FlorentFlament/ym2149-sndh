@@ -15,14 +15,13 @@ class RxStateMachine(object):
         tmp = self.__fd.read()
         if tmp:
             self.__available += ord(tmp)
-            print "(wait_lo) self.__available:", self.__available
             self.__state = "SENDING"
 
     def sending(self):
         if self.__available:
+            sys.stdout.write("\x1b[2K\rYM_empty: {}\tPC_buffer: {}".format(self.__available, len(self.__data)))
             self.__ck_size = min(self.__available, len(self.__data))
-            print "(sending) self.__ck_size:", self.__ck_size
-            print "(sending) len(self.__data):", len(self.__data)
+            sys.stdout.flush()
             self.__fd.write(chr(self.__ck_size>>8 & 0xff))
             self.__fd.write(chr(self.__ck_size & 0xff))
         self.__state = "WAIT_ACK"
