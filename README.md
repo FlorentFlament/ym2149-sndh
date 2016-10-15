@@ -18,3 +18,13 @@ more CPU. It can be useful to play some 'digi' sounds.
 
 Not all SNDH files are currently supported. More optimization would be
 required.
+
+The design supported is the following one:
+
+<img src="static/ym2149-schematic-v2.png" alt="YM2149 schematic V2"/>
+
+<img src="static/ym2149-pic-v2.png" alt="YM2149 driven by Arduino Nano V2"/>
+
+A video of the [YM2149 playing a Relix tune][1] is available on Youtube.
+
+[1]: https://www.youtube.com/watch?v=JjofS8wdNEY
