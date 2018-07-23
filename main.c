@@ -155,20 +155,24 @@ int main() {
       if (buf.last == buf.first) break;
       OCR1AH = M_CIRC_BUF_GET_BYTE;
       smp_state = SMP_TSLO;
+      /* FALLTHRU */
     case SMP_TSLO:
       if (buf.last == buf.first) break;
       OCR1AL = M_CIRC_BUF_GET_BYTE;
       TIFR1 |= 1<<OCF1A; // Clear the flag
       smp_state = SMP_WAIT;
+      /* FALLTHRU */
     case SMP_WAIT:
       if (!(TIFR1 & 1<<OCF1A)) break;
       smp_state = SMP_ADDR;
+      /* FALLTHRU */
     case SMP_ADDR:
       if (buf.last == buf.first) break;
       addr = M_CIRC_BUF_GET_BYTE;
       if (addr == 0xff) { smp_state = SMP_TSHI; break; } // End of sample
       if (addr & 0xf0) { smp_state = SMP_ERR; break; } // Address is bogus
       smp_state = SMP_VAL; // Address is valid
+      /* FALLTHRU */
     case SMP_VAL:
       if (buf.last == buf.first) break;
       val = M_CIRC_BUF_GET_BYTE;
@@ -197,6 +201,7 @@ int main() {
       if (free_cnt == 0) break;
       UDR0 = free_cnt>>8 & 0xff;
       rx_state = RX_CHUNKLO;
+      /* FALLTHRU */
     case RX_CHUNKLO:
       if (!(UCSR0A & 1<<UDRE0)) break;
       UDR0 = free_cnt & 0xff;
