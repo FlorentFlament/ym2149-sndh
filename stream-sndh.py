@@ -1,5 +1,5 @@
 import Queue
-import serial
+import serial # using pyserial package - https://pypi.org/project/pyserial/
 import sys
 import threading
 import time
