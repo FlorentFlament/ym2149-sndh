@@ -10,21 +10,29 @@ objects=$(patsubst %.c,%.o,$(wildcard *.c))
 
 .PHONY: clean flash
 
-all: main.hex
+all: firmware.hex
 
 uart.o: uart.c uart.h
 
 %.o: %.c
 	avr-gcc $(cflags) -c $< -o $@
 
-main.elf: $(objects)
+firmware.elf: $(objects)
 	avr-gcc $(cflags) -o $@ $^
 
-main.hex: main.elf
+firmware.hex: firmware.elf
 	avr-objcopy -j .text -j .data -O ihex $^ $@
 
-flash: main.hex
+flash: firmware.hex
+	avrdude -p$(avrType) -c$(programmerType) -P$(programmerDev) -v -U flash:w:$< -D -b57600
+
+firmware-fast.hex: firmware-fast.asm
+	avra $<
+
+flash-fast: firmware-fast.hex
 	avrdude -p$(avrType) -c$(programmerType) -P$(programmerDev) -v -U flash:w:$< -D -b57600
 
 clean:
-	rm -f main.hex main.elf $(objects) *.s
+	rm -f firmware.hex firmware.elf \
+	      firmware-fast.hex firmware-fast.cof firmware-fast.obj firmware-fast.eep.hex \
+	      $(objects) *.s
