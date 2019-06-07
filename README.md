@@ -25,7 +25,7 @@ The design supported is the following one:
 
 The following table provides the wiring:
 
-| Other | YM2149F name | YM2149F pin | Board pin | ATmega328P pin# | ATmega168P name |
+| Other | YM2149F name | YM2149F pin | Board pin | ATmega328P pin# | ATmega328P name |
 |-------|--------------|-------------|-----------|-----------------|-----------------|
 |       | DA0          | 37          | A0        | 23              | PC0             |
 |       | DA1          | 36          | A1        | 24              | PC1             |
