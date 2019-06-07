@@ -111,7 +111,7 @@ def main():
         ts = (ts + 40000) & 0xffff
 
     s = ''.join(data_ts)
-    print "*****", len(s)
+    print "Data size: {}".format(len(s))
     fd = serial.Serial(sys.argv[1], 1000000, timeout=2)
     # !!! https://github.com/torvalds/linux/blob/c05c2ec96bb8b7310da1055c7b9d786a3ec6dc0c/drivers/usb/serial/ch341.c
     # /* Unimplemented:
@@ -122,19 +122,14 @@ def main():
 
     i = 0
     while i < len(s):
-        cnt = ord(fd.read())
-        cnt = (cnt<<8) + ord(fd.read())
-        fd.write(chr(cnt>>8))
-        fd.write(chr(cnt&0xff))
-        ack = ord(fd.read())
-        print "** cnt,ack", cnt, ack
-        #cnt = cnt if i+cnt < len(s) else len(s)-i
-        j = i+cnt
-        print "*** cnt,i,j", cnt, i, j
-        chunk = s[i:j]
-        #print [ord(c) for c in chunk]
-        fd.write(chunk)
-        i = j
+        h = fd.read()
+        l = fd.read()
+        cnt = (ord(h)<<8) + ord(l)
+        fd.write(h)
+        fd.write(l)
+        fd.read() # ACK
+        fd.write(s[i: i+cnt])
+        i += cnt
     fd.close()
 
 if __name__ == '__main__':
