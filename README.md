@@ -25,10 +25,9 @@ The design supported is the following one:
 
 The following table provides the wiring
 
-+-------+----------+--------------+--------------+-------------------------+
 | Other | YM2149F  | YM2149F      | Arduino Nano | ATmega168A | ATmega168A |
 |       | Pin name | Pin #        | Pin name     | Pin #      | Pin name   |
-+-------+----------+--------------+--------------+------------+------------+
+|-------|----------|--------------|--------------|------------|------------|
 |       | DA0      | 37           | A0           | 23         | PC0        |
 |       | DA1      | 36           | A1           | 24         | PC1        |
 |       | DA2      | 35           | A2           | 25         | PC2        |
@@ -53,8 +52,6 @@ The following table provides the wiring
 | RING2 | VSS(GND) | 1            |              |            |            |
 | SLEEVE| VSS(GND) | 1            | GNDx         |            |            |
 |       | VCC      | 40           | 5V           |            |            |
-|       |          |              |              |            |            |
-+-------+----------+--------------+--------------+------------+------------+
 
 <img src="ym2149-pic-v2.png" alt="YM2149 driven by Arduino Nano V2"/>
 
