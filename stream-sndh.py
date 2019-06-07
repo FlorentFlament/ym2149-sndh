@@ -1,5 +1,6 @@
 import Queue
 import serial # using pyserial package - https://pypi.org/project/pyserial/
+import signal
 import sys
 import threading
 import time
@@ -25,10 +26,24 @@ class UART_manager(threading.Thread):
             self.__fd.write(''.join([self.__q.get() for _ in xrange(chunk_size)]))
 
 
+
+# Stolen from
+# https://stackoverflow.com/questions/18499497/how-to-process-sigterm-signal-gracefully
+class GracefulKiller:
+  kill_now = False
+
+  def __init__(self):
+    signal.signal(signal.SIGINT, self.exit_gracefully)
+
+  def exit_gracefully(self, signum, frame):
+    self.kill_now = True
+
+
 def main():
     fd = serial.Serial("/dev/ttyUSB0", 1000000, timeout=2)
     q = Queue.Queue()
     um = UART_manager(fd, q)
+    killer = GracefulKiller()
 
     um.start()
     l = sys.stdin.readline()
@@ -45,6 +60,8 @@ def main():
             l = sys.stdin.readline()
         else:
             time.sleep(0.01)
+        if killer.kill_now:
+            break
     for c in '\x00\x00\x08\x00\x09\x00\x0a\x00\xff': # Turn off channels
         q.put(c)
 
