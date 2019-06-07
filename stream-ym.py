@@ -98,6 +98,7 @@ def main():
         ym.dump_header()
         header = ym.get_header()
         data = ym.get_data()
+    data.append('\x00'*16) # Mute song - Doesn't work as a
 
     data_ts = []
     ts = 0
@@ -122,11 +123,11 @@ def main():
 
     i = 0
     while i < len(s):
-        h = fd.read()
-        l = fd.read()
-        cnt = (ord(h)<<8) + ord(l)
-        fd.write(h)
-        fd.write(l)
+        cnt = ord(fd.read()) << 8
+        cnt+= ord(fd.read())
+        cnt = min(cnt, len(s)-i)
+        fd.write(chr(cnt >> 8))
+        fd.write(chr(cnt & 0xff))
         fd.read() # ACK
         fd.write(s[i: i+cnt])
         i += cnt
