@@ -17,16 +17,23 @@
 ; -   it will transmit the amount of free bytes in the buffer. It will store   -
 ; -   exactly that many bytes in the buffer before again transmitting the      -
 ; -   amount of free room in the buffer. This process continues indefinitely.  -
-; -   The baudrate is 2000000, format 8-N-1.                                   -
+; -   The baudrate is configurable below, format 8-N-1.                        -
 ; -                                                                            -
 ; -   Song data is expected in packets in the following format:                -
-; -   2 bytes: Time modulo 65535 in clock cycles for the YM2149 for the sample -
-; -            to be played. High byte first.                                  -
+; -   2 bytes: Time in clock cycles for the YM2149 for the sample to be played.-
+; -            since the last sample. High byte first.                         -
 ; -   2*n bytes: A series of byte pairs, the first being the register number,  -
 ; -              the second being the register value. N may be 0 to allow for  -
 ; -              filler packets.                                               -
-; -   1 byte: 0xFF to signify the end of packet.                               -
+; -   1 byte: 0xFF to signify the end of packet. 0xFE to signify end of song.  -
 ; ------------------------------------------------------------------------------
+
+    ; Options: 250000, 500000, or 1000000
+    .equ    BITRATE         = 500000
+
+    ; If set to 0, the playback routine will ignore the YM2149's specsheet and
+    ; toggle as fast as it can. This may not work on all chips.
+    .equ    RESPECT_SPECS   = 1
 
     .nolist
     ; ATmega328P definitions, but we use our own names for the X, Y, and Z regs.
@@ -43,6 +50,8 @@
     ; Constants
     .equ    BC1_PIN         = 5
     .equ    BDIR_PIN        = 4
+    .equ    WDAT_MODE       = 0x20
+    .equ    ADDR_MODE       = 0x30
     ; We use every single byte of RAM.
     ; Total memory = 2048b, 2b for the stack, just enough for an interrupt
     .equ    BUF_SIZE        = 2046 
@@ -62,9 +71,9 @@
     .def    free_cnt_l   = r8
     .def    free_cnt_h   = r9
     .def    xmit_get     = r10
-    .def    wait_reg     = r12
-    .def    addr_reg     = r13
-    .def    val_reg      = r14
+    .def    mode_0       = r12
+    .def    mode_1       = r13
+    .def    mode_2       = r14
     .def    temp_1       = r16
     .def    temp_2       = r17
     .def    can_start    = r18
@@ -122,11 +131,13 @@ reset:
     ; Set up serial device.
     clr     temp_1
     sts     UBRR0H, temp_1
+.if BITRATE == 500000
+    ldi     temp_1, 1
+.elif BITRATE == 250000
+    ldi     temp_1, 3
+.else ; BITRATE == 1000000
+.endif
     sts     UBRR0L, temp_1
-    ; Yes, you're seeing that right. 2MBps on an m328p!
-    ; Assembly makes it possible to make the time reqs.
-    ldi     temp_1, (1<<U2X0)
-    sts     UCSR0A, temp_1
     ldi     temp_1, (1<<TXEN0)|(1<<RXEN0)|(1<<RXCIE0)
     sts     UCSR0B, temp_1
     ldi     temp_1, (1<<UCSZ00)|(1<<UCSZ01)
@@ -160,10 +171,23 @@ reset:
     ldi     smp_state, SMP_SAMPLEGET
     ldi     progmem_h, high(lut<<1)
     clr     can_start
+    clr     mode_0
+    ldi     temp_1, ADDR_MODE
+    mov     mode_1, temp_1
+    ldi     temp_1, WDAT_MODE
+    mov     mode_2, temp_1
+
+    ; Clear the registers.
+    rcall   clear_registers
+
     ; Enable interrupts and jump to the RX state machine since the
     ; buffer will be empty.
     sei
     rjmp    rx_state_machine
+
+freeze:
+    rcall   clear_registers
+    rjmp    PC
 
     ; Sample state machine
 smp_state_machine:
@@ -178,15 +202,23 @@ smp_get_handler:
     ; Adjust the timer
     sts     OCR1AH, temp_1
     sts     OCR1AL, temp_2
+    clr     temp_1
+    sts     TCNT1H, temp_1
+    sts     TCNT1L, temp_1
     sbi     TIFR1, OCF1A
     ldi     smp_state, SMP_SAMPLEPROC
 
 smp_proc_handler:
     ; --- Handle case SMP_SAMPLEPROC ---
     ; Wait for the appropriate time
+    in      temp_1, PORTB
     sbis    TIFR1, OCF1A
     rjmp    rx_state_machine
 smp_proc_handler_get_addr:
+    ; Disable interrupts in critical section
+.if BITRATE != 1000000
+    cli
+.endif
     ; Get the address
     bufg    addr
     ; Check for special values
@@ -194,8 +226,11 @@ smp_proc_handler_get_addr:
     ; If address below 0XFE, continue.
     brlo    smp_proc_handler_get_val
     ; If address = 0xFE, enter an infinite loop.
-    breq    PC    
-    ; Otherwise, return to the GET state.
+    breq    freeze
+    ; Otherwise, return to the GET state and re-enable the interrupts.
+.if BITRATE != 1000000
+    sei
+.endif
     ldi     smp_state, SMP_SAMPLEGET
     rjmp    smp_get_handler
 smp_proc_handler_get_val:
@@ -203,12 +238,14 @@ smp_proc_handler_get_val:
     bufg    val
     
     ; ---- TIMING CRITICAL SECTION! ----
+    ; NOTE: Depending on your specific chip, you may be able to comment out
+    ; any or all of the nop instructions below.
+    ;
     ; One clock cycle equals 65ns.
     ; At this point we know we have the address and the value loaded.
     ; We need to put the YM2149 in address mode before putting the data
     ; on the data lines.
-    sbi     PORTB, BC1_PIN
-    sbi     PORTB, BDIR_PIN
+    out     PORTB, mode_1
     ; We write the address to PORTC and PORTD. Because all the pins of
     ; PORTD that we aren't allowed to change are controlled by periphs,
     ; we can just write to it and not care!
@@ -216,27 +253,33 @@ smp_proc_handler_get_val:
     out     PORTC, addr
     ; tAS = 300ns, meaning that the data needs to remain for 5 cycles.
     ; After this time is up, we turn off the address mode.
+.if RESPECT_SPECS == 1
     nop
     nop
     nop
-    cbi     PORTB, BDIR_PIN
-    cbi     PORTB, BC1_PIN
+    nop
+.endif
+    out     PORTB, mode_0
     ; tAH = 80ns, or 2 cycles. The data needs to remain for this time
     ; after switching out of address mode. No delays are needed here,
     ; because the setup for write mode takes longer. We first write
     ; the data onto the data lines.
+.if RESPECT_SPECS == 1
     nop
+.endif
     out     PORTD, val
     out     PORTC, val
     ; tDS = 0ns, so we may switch immediately to data write mode.
-    sbi     PORTB, BDIR_PIN
+    out     PORTB, mode_2
     ; tDW = 300ns, data must remain on the bus for 5 cycles before
     ; clearing the mode.
+.if RESPECT_SPECS == 1
     nop
     nop
     nop
     nop
-    cbi     PORTB, BDIR_PIN
+.endif
+    out     PORTB, mode_0
     ; tDH = 80ns, but the data will remain on the bus for an entire
     ; loop.
     ; ---- END TIMING CRITICAL SECTION! ----
@@ -343,6 +386,32 @@ isr_usart_rx_4:
     out     SREG, temp_sreg
     reti
 ; ---- USART RX VECTOR ---- ;
+
+; Reset the registers
+clear_registers:
+    ldi     temp_2, 16
+    clr     temp_1
+clear_registers_loop:
+    dec     temp_2
+    out     PORTB, mode_1
+    out     PORTD, temp_2
+    out     PORTC, temp_2
+    nop
+    nop
+    nop
+    nop
+    out     PORTB, mode_0
+    nop
+    out     PORTD, temp_1
+    out     PORTC, temp_1
+    out     PORTB, mode_2
+    nop
+    nop
+    nop
+    nop
+    out     PORTB, mode_0
+    brne    clear_registers_loop
+    ret
 
 ; Program variables
 .org 0x200

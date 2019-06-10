@@ -24,27 +24,30 @@ class UART_manager(threading.Thread):
 
 
 def main():
-    fd = serial.Serial("/dev/ttyUSB0", 2000000, timeout=2)
+    fd = serial.Serial("/dev/ttyUSB0", 500000, timeout=2)
     q = Queue.Queue()
     um = UART_manager(fd, q)
 
     um.start()
     l = sys.stdin.readline()
+    prev_ts = 0
     while l:
         if q.qsize() < 3000:
             _, ts, regs = l.split()
-            q.put(chr(int(ts[-4:-2], 16)))
-            q.put(chr(int(ts[-2:], 16)))
+            ts = int(ts, 16)
+            delta = ts - prev_ts
+            prev_ts = ts
+            q.put(chr(delta >> 8))
+            q.put(chr(delta & 0xff))
             en_regs = filter(lambda x:x[1] != '..', enumerate(regs.split('-')))
             for n,r in en_regs:
                 q.put(chr(n))
                 q.put(chr(int(r,16)))
-            q.put('\xff')
+            q.put('\xff') # End of sample
             l = sys.stdin.readline()
         else:
             time.sleep(0.01)
-    for c in '\x00\x00\x08\x00\x09\x00\x0a\x00\xff': # Turn off channels
-        q.put(c)
+    q.put('\xfe') # End of song
 
     um.join()
     fd.close()
