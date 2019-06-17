@@ -105,9 +105,16 @@ def main():
     for d in data:
         data_ts.append(chr(ts>>8 & 0xff))
         data_ts.append(chr(ts & 0xff))
-        for i,v in enumerate(d):
+        # r0-r12 are updated on YM all the time
+        for i,v in enumerate(d[:13]):
             data_ts.append(chr(i))
             data_ts.append(v)
+        # r13 (Waveform shape) is only updated if != 0xff
+        if d[13] != 0xff:
+            data_ts.append(chr(13))
+            data_ts.append(d[13])
+        # Not implementing DD (digi-drums) and TS (Timer-Synth)
+        # Using bytes 14 and 15 of YM stream
         data_ts.append('\xff') # Stop character
         ts = (ts + 40000) & 0xffff
 
