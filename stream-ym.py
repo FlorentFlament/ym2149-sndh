@@ -110,7 +110,7 @@ def main():
             data_ts.append(chr(i))
             data_ts.append(v)
         # r13 (Waveform shape) is only updated if != 0xff
-        if d[13] != 0xff:
+        if d[13] != '\xff':
             data_ts.append(chr(13))
             data_ts.append(d[13])
         # Not implementing DD (digi-drums) and TS (Timer-Synth)
@@ -120,6 +120,7 @@ def main():
 
     s = ''.join(data_ts)
     print "Data size: {}".format(len(s))
+
     fd = serial.Serial(sys.argv[1], 1000000, timeout=2)
     # !!! https://github.com/torvalds/linux/blob/c05c2ec96bb8b7310da1055c7b9d786a3ec6dc0c/drivers/usb/serial/ch341.c
     # /* Unimplemented:
