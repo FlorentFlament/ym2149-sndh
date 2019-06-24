@@ -6,8 +6,7 @@ import sys
 
 DEBUG = False
 
-class YmReader(object):
-
+class YmReader:
     def __parse_extra_infos(self):
         def readcstr():
             l = []
@@ -49,7 +48,8 @@ class YmReader(object):
     def __read_data_interleaved(self):
         cnt  = self.__header['nb_frames']
         regs = [self.__fd.read(cnt) for i in range(16)]
-        self.__data = zip(*regs)
+        # Storing the data in a list to be able to iterate on it several times
+        self.__data = list(zip(*regs))
 
     def __read_data(self):
         if not self.__header['interleaved']:
@@ -61,8 +61,8 @@ class YmReader(object):
         if self.__fd.read(4) != b'End!':
             print('*Warning* End! marker not found after frames')
 
-    def __init__(self, fd):
-        self.__fd = fd
+    def __init__(self, ym_fname):
+        self.__fd = open(ym_fname, 'rb')
         self.__parse_header()
         self.__data = []
 
@@ -72,6 +72,10 @@ class YmReader(object):
                   'extra_data', 'song_name', 'author_name', 'song_comment'):
             print("{}: {}".format(k, self.__header[k]))
 
+    def dump_data(self):
+        for d in self.get_data():
+            print(" ".join([("${:02x}".format(v)) for v in d]))
+
     def get_header(self):
         return self.__header
 
@@ -79,27 +83,75 @@ class YmReader(object):
         if not self.__data:
             self.__read_data()
             self.__check_eof()
+            self.__fd.close()
         return self.__data
 
 
-def dump_ym(data):
-    for d in data:
-        print(" ".join([("${:02x}".format(v)) for v in d]))
+class ChipController:
+    def __parse_ym(self, ym_data):
+        self.__data = []
+        ts = 0
+        for d in ym_data:
+            self.__data.append(ts>>8 & 0xff)
+            self.__data.append(ts & 0xff)
+            # r0-r12 are updated on YM all the time
+            for i,v in enumerate(d[:13]):
+                self.__data.append(i)
+                self.__data.append(v)
+            # r13 (Waveform shape) is only updated if != 0xff
+            if d[13] != 0xff:
+                self.__data.append(13)
+                self.__data.append(d[13])
+            # Not implementing DD (digi-drums) and TS (Timer-Synth)
+            # Using bytes 14 and 15 of YM stream
+            self.__data.append(0xff) # Stop character
+            ts = (ts + 40000) & 0xffff
 
-def dump_stream(stream):
-    ln = []
-    i = 0
-    for n in stream:
-        ln.append(n)
-        if i == 1:
-            ts = (ln[0]<<8) + ln[1]
-            print(str(ts).ljust(5), end="  ")
-        if i != 0 and i%2 == 0 and n == 0xff:
-            print(" ".join([("${:02x}".format(v)) for v in ln]))
-            ln = []
-            i = 0
-        else:
-            i += 1
+    def __init__(self, ym_data):
+        self.__parse_ym(ym_data)
+
+    def get_data(self):
+        return self.__data
+
+    def get_length(self):
+        return len(self.__data)
+
+    def dump_stream(self):
+        ln = []
+        i = 0
+        for n in self.__data:
+            ln.append(n)
+            if i == 1:
+                ts = (ln[0]<<8) + ln[1]
+                print(str(ts).ljust(5), end="  ")
+            if i != 0 and i%2 == 0 and n == 0xff:
+                print(" ".join([("${:02x}".format(v)) for v in ln]))
+                ln = []
+                i = 0
+            else:
+                i += 1
+
+    def send_stream(self, fname):
+        fd = serial.Serial(fname, 1000000, timeout=2)
+        # !!! https://github.com/torvalds/linux/blob/c05c2ec96bb8b7310da1055c7b9d786a3ec6dc0c/drivers/usb/serial/ch341.c
+        # /* Unimplemented:
+        #  * (cflag & CSIZE) : data bits [5, 8]
+        #  * (cflag & PARENB) : parity {NONE, EVEN, ODD}
+        #  * (cflag & CSTOPB) : stop bits [1, 2]
+        #  */
+
+        s = bytes(self.get_data())
+        i = 0
+        while i < len(s):
+            cnt = fd.read(1)[0] << 8
+            cnt+= fd.read(1)[0]
+            cnt = min(cnt, len(s)-i)
+            fd.write([cnt >> 8, cnt & 0xff])
+            fd.read(1) # ACK
+            fd.write(s[i: i+cnt])
+            i += cnt
+        fd.close()
+
 
 def main():
     header = None
@@ -113,60 +165,21 @@ def main():
     if DEBUG:
         print("\nStarting parsing of {}".format(ym_fname))
 
-    with open(ym_fname, 'rb') as fd:
-        ym = YmReader(fd)
-        ym.dump_header()
-        header = ym.get_header()
-        data = list(ym.get_data()) # This returns the samples as integers
-
+    ym = YmReader(ym_fname)
+    ym.dump_header()
     if DEBUG:
         print("\nParsed {} successfully".format(ym_fname))
-        dump_ym(data)
+        ym.dump_data()
         print("\nBuilding board data stream")
 
-    data_ts = []
-    ts = 0
-    for d in data:
-        data_ts.append(ts>>8 & 0xff)
-        data_ts.append(ts & 0xff)
-        # r0-r12 are updated on YM all the time
-        for i,v in enumerate(d[:13]):
-            data_ts.append(i)
-            data_ts.append(v)
-        # r13 (Waveform shape) is only updated if != 0xff
-        if d[13] != 0xff:
-            data_ts.append(13)
-            data_ts.append(d[13])
-        # Not implementing DD (digi-drums) and TS (Timer-Synth)
-        # Using bytes 14 and 15 of YM stream
-        data_ts.append(0xff) # Stop character
-        ts = (ts + 40000) & 0xffff
-
+    # ym.get_data() returns the samples as integers
+    chip = ChipController(ym.get_data())
     if DEBUG:
         print("\nBuilt board data stream successfully")
-        dump_stream(data_ts)
+        chip.dump_stream()
 
-    s = bytes(data_ts)
-    print("Data size: {}".format(len(s)))
-
-    fd = serial.Serial(sys.argv[1], 1000000, timeout=2)
-    # !!! https://github.com/torvalds/linux/blob/c05c2ec96bb8b7310da1055c7b9d786a3ec6dc0c/drivers/usb/serial/ch341.c
-    # /* Unimplemented:
-    #  * (cflag & CSIZE) : data bits [5, 8]
-    #  * (cflag & PARENB) : parity {NONE, EVEN, ODD}
-    #  * (cflag & CSTOPB) : stop bits [1, 2]
-    #  */
-
-    i = 0
-    while i < len(s):
-        cnt = fd.read(1)[0] << 8
-        cnt+= fd.read(1)[0]
-        cnt = min(cnt, len(s)-i)
-        fd.write([cnt >> 8, cnt & 0xff])
-        fd.read(1) # ACK
-        fd.write(s[i: i+cnt])
-        i += cnt
-    fd.close()
+    print("Data size: {}".format(chip.get_length()))
+    chip.send_stream(sys.argv[1])
 
 if __name__ == '__main__':
     main()
