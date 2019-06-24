@@ -82,12 +82,6 @@ class YmReader(object):
         return self.__data
 
 
-def to_minsec(frames, frames_rate):
-    secs = frames / frames_rate
-    mins = secs / 60
-    secs = secs % 60
-    return (mins, secs)
-
 def dump_ym(data):
     for d in data:
         print(" ".join([("${:02x}".format(v)) for v in d]))
