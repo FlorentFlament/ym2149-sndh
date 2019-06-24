@@ -5,9 +5,19 @@ import struct
 import serial
 import sys
 
+# The period (number of clock cyckes at 2MHz) between 2 samples (at 50Hz)
+SAMPLES_PERIOD = 40000
+
 DEBUG = False
 
 class YmReader:
+    def __parse_digidrums(self):
+        self.__digidrums = []
+        for _ in range(self.__header['nb_digidrums']):
+            bs = self.__fd.read(4)
+            sz = (bs[0]<<24) + (bs[1]<<16) + (bs[2]<<8) + bs[3]
+            self.__digidrums.append(self.__fd.read(sz))
+
     def __parse_extra_infos(self):
         def readcstr():
             l = []
@@ -39,11 +49,13 @@ class YmReader:
          d['extra_data'],
         ) = struct.unpack(ym_header, s)
         d['interleaved'] = d['song_attributes'] & 0x01 != 0
+        # The 2 following flags aren't used in this code, for now.
+        # They are documented in the YM spec.
+        d['dd_signed'] = d['song_attributes'] & 0x02 != 0
+        d['dd_st4bits'] = d['song_attributes'] & 0x04 != 0
         self.__header = d
 
-        if self.__header['nb_digidrums'] != 0:
-            raise Exception(
-                'Unsupported file format: Digidrums are not supported')
+        self.__parse_digidrums()
         self.__parse_extra_infos()
 
     def __read_data_interleaved(self):
@@ -70,8 +82,11 @@ class YmReader:
     def dump_header(self):
         for k in ('id','check_string', 'nb_frames', 'song_attributes',
                   'nb_digidrums', 'chip_clock', 'frames_rate', 'loop_frame',
-                  'extra_data', 'song_name', 'author_name', 'song_comment'):
+                  'extra_data', 'song_name', 'author_name', 'song_comment',
+                  'interleaved', 'dd_signed','dd_st4bits'):
             print("{}: {}".format(k, self.__header[k]))
+        for i, dd in enumerate(self.__digidrums):
+            print("Digi-drum {}: {} samples".format(i, len(dd)))
 
     def dump_data(self):
         for d in self.get_data():
@@ -89,10 +104,40 @@ class YmReader:
 
 
 class ChipController:
+    __tp_table = [None, 4, 10, 16, 50, 64, 100, 200]
+
+    # To understand this,
+    # see: ym-file-format.txt YM4 description
+    def __process_digidrum(self, sample):
+        # Is there a digidrum to play on a channel ?
+        dd_start = (sample[3]>>4) & 0x3
+        if dd_start == 0:
+            return # No digidrum to play
+        chan = dd_start - 1
+
+        # Fetching the digidrum ID in [0:32[
+        dd_id = sample[8 + chan] & 0x31
+
+        # Computing the period of the digidrum
+        tp = sample[8] >> 5
+        tc = sample[15]
+        # The period in seconds between to samples at the `freq` frequency where:
+        # freq = (2457600/self.__tp_table[tp]) / tc
+        # period = (self.__tp_table[tp] * tc) / 2457600
+        # The corresponding number of clocks cycles at 2MHz is:
+        period_ck = (self.__tp_table[tp] * tc * 20000) // 24576
+
+        # 4bits volume of the digidrum
+        vol = (sample[5]>>4) & 0xf
+
+        # To be continued
+
+
     def __parse_ym(self, ym_data):
         self.__data = []
         ts = 0
         for d in ym_data:
+            self.__process_digidrums(d)
             self.__data.append(ts>>8 & 0xff)
             self.__data.append(ts & 0xff)
             # r0-r12 are updated on YM all the time
@@ -106,7 +151,7 @@ class ChipController:
             # Not implementing DD (digi-drums) and TS (Timer-Synth)
             # Using bytes 14 and 15 of YM stream
             self.__data.append(0xff) # Stop character
-            ts = (ts + 40000) & 0xffff if self.__firmware == 'slow' else 40000
+            ts = (ts + SAMPLES_PERIOD) & 0xffff if self.__firmware == 'slow' else SAMPLES_PERIOD
 
     def __init__(self, ym_data, firmware='slow'):
         self.__firmware = firmware
@@ -166,25 +211,28 @@ def main():
                         help='The device where to send the music stream (default /dev/ttyUSB0)')
     parser.add_argument('--firmware', choices=['slow', 'fast'], default='slow',
                         help='Specify which firmware to target')
+    parser.add_argument('--debug', action='store_true',
+                        help='Dump YM file and stream instead of playing the song')
     args = parser.parse_args()
 
-    if DEBUG:
+    if args.debug:
         print("\nStarting parsing of {}".format(args.ym_fname))
 
     ym = YmReader(args.ym_fname)
     ym.dump_header()
-    if DEBUG:
+    if args.debug:
         print("\nParsed {} successfully".format(args.ym_fname))
         ym.dump_data()
         print("\nBuilding board data stream using firmware {}".format(args.firmware))
 
     chip = ChipController(ym.get_data(), args.firmware)
-    if DEBUG:
+    if args.debug:
         print("\nBuilt board data stream successfully")
         chip.dump_stream()
 
     print("Data size: {}".format(chip.get_length()))
-    chip.send_stream(args.device)
+    if not args.debug:
+        chip.send_stream(args.device)
 
 if __name__ == '__main__':
     main()
