@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import struct
 import serial
 import sys
@@ -154,32 +155,31 @@ class ChipController:
 
 
 def main():
-    header = None
-    data = None
+    parser = argparse.ArgumentParser(
+        description='Play a YM file on a YM-ATmega board')
+    parser.add_argument('dev_fname',
+        help='The device where to send the music stream (for instance /dev/ttyUSB0)')
+    parser.add_argument('ym_fname',
+        help='The path of the YM file to play')
+    args = parser.parse_args()
 
-    if len(sys.argv) != 3:
-        print("Syntax is: {} <output_device> <ym_filepath>".format(sys.argv[0]))
-        exit(0)
-
-    ym_fname = sys.argv[2]
     if DEBUG:
-        print("\nStarting parsing of {}".format(ym_fname))
+        print("\nStarting parsing of {}".format(args.ym_fname))
 
-    ym = YmReader(ym_fname)
+    ym = YmReader(args.ym_fname)
     ym.dump_header()
     if DEBUG:
-        print("\nParsed {} successfully".format(ym_fname))
+        print("\nParsed {} successfully".format(args.ym_fname))
         ym.dump_data()
         print("\nBuilding board data stream")
 
-    # ym.get_data() returns the samples as integers
     chip = ChipController(ym.get_data())
     if DEBUG:
         print("\nBuilt board data stream successfully")
         chip.dump_stream()
 
     print("Data size: {}".format(chip.get_length()))
-    chip.send_stream(sys.argv[1])
+    chip.send_stream(args.dev_fname)
 
 if __name__ == '__main__':
     main()
