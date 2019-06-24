@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 
-import functools
-import itertools
 import struct
 import serial
 import sys
-import time
 
 DEBUG = False
 
