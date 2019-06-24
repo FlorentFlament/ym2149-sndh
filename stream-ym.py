@@ -106,9 +106,10 @@ class ChipController:
             # Not implementing DD (digi-drums) and TS (Timer-Synth)
             # Using bytes 14 and 15 of YM stream
             self.__data.append(0xff) # Stop character
-            ts = (ts + 40000) & 0xffff
+            ts = (ts + 40000) & 0xffff if self.__firmware == 'slow' else 40000
 
-    def __init__(self, ym_data):
+    def __init__(self, ym_data, firmware='slow'):
+        self.__firmware = firmware
         self.__parse_ym(ym_data)
 
     def get_data(self):
@@ -133,7 +134,8 @@ class ChipController:
                 i += 1
 
     def send_stream(self, fname):
-        fd = serial.Serial(fname, 1000000, timeout=2)
+        firmware_bitrate = {'slow': 1000000, 'fast': 500000}
+        fd = serial.Serial(fname, firmware_bitrate[self.__firmware], timeout=2)
         # !!! https://github.com/torvalds/linux/blob/c05c2ec96bb8b7310da1055c7b9d786a3ec6dc0c/drivers/usb/serial/ch341.c
         # /* Unimplemented:
         #  * (cflag & CSIZE) : data bits [5, 8]
@@ -146,9 +148,10 @@ class ChipController:
         while i < len(s):
             cnt = fd.read(1)[0] << 8
             cnt+= fd.read(1)[0]
-            cnt = min(cnt, len(s)-i)
-            fd.write([cnt >> 8, cnt & 0xff])
-            fd.read(1) # ACK
+            if self.__firmware == 'slow':
+                cnt = min(cnt, len(s)-i)
+                fd.write([cnt >> 8, cnt & 0xff])
+                fd.read(1) # ACK
             fd.write(s[i: i+cnt])
             i += cnt
         fd.close()
@@ -157,10 +160,12 @@ class ChipController:
 def main():
     parser = argparse.ArgumentParser(
         description='Play a YM file on a YM-ATmega board')
-    parser.add_argument('dev_fname',
-        help='The device where to send the music stream (for instance /dev/ttyUSB0)')
     parser.add_argument('ym_fname',
-        help='The path of the YM file to play')
+                        help='The path of the YM file to play')
+    parser.add_argument('--device', default='/dev/ttyUSB0',
+                        help='The device where to send the music stream (default /dev/ttyUSB0)')
+    parser.add_argument('--firmware', choices=['slow', 'fast'], default='slow',
+                        help='Specify which firmware to target')
     args = parser.parse_args()
 
     if DEBUG:
@@ -171,15 +176,15 @@ def main():
     if DEBUG:
         print("\nParsed {} successfully".format(args.ym_fname))
         ym.dump_data()
-        print("\nBuilding board data stream")
+        print("\nBuilding board data stream using firmware {}".format(args.firmware))
 
-    chip = ChipController(ym.get_data())
+    chip = ChipController(ym.get_data(), args.firmware)
     if DEBUG:
         print("\nBuilt board data stream successfully")
         chip.dump_stream()
 
     print("Data size: {}".format(chip.get_length()))
-    chip.send_stream(args.dev_fname)
+    chip.send_stream(args.device)
 
 if __name__ == '__main__':
     main()
